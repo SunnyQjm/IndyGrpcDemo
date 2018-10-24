@@ -1,0 +1,19 @@
+{
+  "name": "indygrpcdemo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@grpc/proto-loader": "^0.3.0",
+    "grpc": "^1.15.1",
+    "indy-sdk": "^1.6.2",
+    "lodash": "^4.17.11",
+    "minimist": "^1.2.0",
+    "mkdirp": "latest"
+  }
+}
