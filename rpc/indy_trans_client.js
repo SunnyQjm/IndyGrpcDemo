@@ -19,10 +19,48 @@ const packageDefine = protoLoader.loadSync(
 const indyTransProto = grpc.loadPackageDefinition(packageDefine).indy_demo;
 
 
-class IndyTransClient extends indyTransProto.IndyTrans{
+class IndyTransClient extends indyTransProto.IndyTrans {
     constructor(ip, port, indyNode) {
         super(`${ip}:${port}`, grpc.credentials.createInsecure());
         this.indyNode = indyNode;
+    }
+
+    /**
+     * 向一个 TrustAnchor 级的节点申请获得一个身份
+     * @returns {Promise<any>}
+     */
+    getVerinymDid(call, role, senderVk, receiverVk) {
+        const that = this;
+        return new Promise((resolve, reject) => {
+            let toDid, tokey;
+            call.on('data', data => {
+                switch (data.code) {
+                    case Code.GET_VERINYM_SUCCESS:
+                        resolve(toDid);
+                        break;
+                    case Code.ERROR:
+                        reject(Error('getVerinym fail'));
+                        break;
+                }
+            });
+            that.indyNode.createAndStoreDidRandom()
+                .then(res => {              //创建一个Did和Verkey对，用来准备作为 Verinym 身份
+                    [toDid, tokey] = res;
+                    return that.indyNode.cryptoAuthCrypt(senderVk, receiverVk, {
+                        did: toDid,
+                        verkey: tokey,
+                        role: role,
+                    })
+                })
+                .then(authCryptedDidInfo => {
+                    //将加密后的请求数据发到服务器端
+                    call.write({
+                        code: Code.GET_VERINYM_REQUEST,
+                        msg: authCryptedDidInfo,
+                    })
+                })
+                .catch(reject);
+        });
     }
 
     /**
@@ -76,18 +114,18 @@ class IndyTransClient extends indyTransProto.IndyTrans{
                             });
                         break;
                     case Code.ON_BOARDING_SUCCESS:      //onboarding 成功
-                        call.end();
                         resolve({
                             myDid: communicationDid,
                             myVerkey: communicationVerkey,
                             targetDid: targetDid,
                             targetVerkey: targetVerkey,
+                            call: call,
                         });
                         break;
                     case Code.ERROR:
                         call.end();
                         let errMsg = dataMsg;
-                        if(typeof dataMsg === 'object') {
+                        if (typeof dataMsg === 'object') {
                             errMsg = JSON.stringify(dataMsg);
                         }
                         debuger.errorDebug({

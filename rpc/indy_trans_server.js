@@ -28,15 +28,17 @@ class IndyTransServer extends grpc.Server {
         this.bind(`${ip}:${port}`, grpc.ServerCredentials.createInsecure());
 
         const that = this;
-        this.sendBytesReceiveBytes = this.sendBytesReceiveBytes.bind(this);
-        this.sendStreamReceiveStream = this.sendStreamReceiveStream.bind(this);
+        // this.sendBytesReceiveBytes = this.sendBytesReceiveBytes.bind(this);
+        // this.sendStreamReceiveStream = this.sendStreamReceiveStream.bind(this);
         this.onboarding = this.onboarding.bind(this);
 
         //添加协议提供的服务
         this.addService(indyTransProto.IndyTrans.service, {
             onboarding: that.onboarding,
+            // getVerinym: that.getVerinym
         });
     }
+
 
     /**
      * 实现onboarding 流程
@@ -56,8 +58,9 @@ class IndyTransServer extends grpc.Server {
             }
 
             switch (data.code) {
-                case Code.NOT_DEFINE:
-                    break;
+                ///////////////////////////////////////////
+                /////// 下面是处理 onboarding 连接流程
+                ///////////////////////////////////////////
                 case Code.ON_BOARDING_PRE_REQUEST:      //onboarding 预请求
                     await that.indyNode.createAndStoreDidRandom()
                         .then(arr => {
@@ -84,7 +87,7 @@ class IndyTransServer extends grpc.Server {
                         });
                     break;
                 case Code.ON_BOARDING_RESPONSE:         //onboarding 连接建立成功的回调
-                    await that.indyNode.decryptoAnonCrypt(fromToKey, data.msg)
+                    await that.indyNode.cryptoAnonDecrypt(fromToKey, data.msg)
                         .then(decryptedConnectionResponse => {
                             if(nonce !== decryptedConnectionResponse.nonce) {       //nonce不匹配
                                 call.write({
@@ -111,6 +114,47 @@ class IndyTransServer extends grpc.Server {
                         .catch(err => {
                             console.log(err);
                         });
+                    break;
+
+
+                //////////////////////////////////////////////
+                //////// 下面是处理getVerinym流程
+                //////////////////////////////////////////////
+                case Code.GET_VERINYM_REQUEST:      //处理getVerinym请求
+                    that.indyNode.cryptoAuthDecrypt(fromToKey, Buffer.from(data.msg))
+                        .then(async res => {
+                            //获得发送者的Verkey和发送者发送的信息的明文字符串
+                            let [senderVerkey, authDecryptDidInfo] = res;
+
+                            // let receiverVerkey = await that.indyNode.findKeyForDidAndCacheToLocalWallet(authDecryptDidInfo.did);
+                            // console.log('receiverVerkey: ' + receiverVerkey);
+                            //
+                            // //如果发送者在账本中的Verkey与解密出来的Verkey不一致，则请求失败
+                            // if(receiverVerkey !== senderVerkey) {
+                            //     return Promise.reject(Error('Verkey is not the same'));
+                            // }
+                            return that.indyNode.sendNym(authDecryptDidInfo.did, authDecryptDidInfo.verkey, authDecryptDidInfo.role);
+                        })
+                        .then(res => {  //执行这一步说明身份申请成功，并且已经写入账本
+                            call.write({
+                                code: Code.GET_VERINYM_SUCCESS,
+                            })
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            // getVrinym 错误，告知客户端
+                            call.write({
+                                code: Code.ERROR,
+                                msg: Buffer.from(JSON.stringify(err), 'utf8')
+                            });
+                        });
+                    break;
+
+                ////////////////////////////////////////
+                ////// 下面情况不作处理
+                ////////////////////////////////////////
+                case Code.NOT_DEFINE:
+                default:
                     break;
             }
         });

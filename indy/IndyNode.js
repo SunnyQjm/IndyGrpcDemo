@@ -233,19 +233,42 @@ class IndyNode {
         };
     }
 
-    cryptoAnonCrypt(fromToVerkey, json) {
-        let data = json;
-        if(typeof json === 'object') {
-            data = JSON.stringify(json);
+    /////////////////////////////////////////////////////////////////////////////////
+    ///////// 下面是一些加解密函数封装
+    /////////////////////////////////////////////////////////////////////////////////
+
+    cryptoAnonCrypt(fromToVerkey, data) {
+        let json = data;
+        if(typeof data === 'object') {
+            json = JSON.stringify(data);
         }
-        return indy.cryptoAnonCrypt(fromToVerkey, Buffer.from(data, 'utf8'));
+        return indy.cryptoAnonCrypt(fromToVerkey, Buffer.from(json, 'utf8'));
     }
 
-    decryptoAnonCrypt(fromToVerkey, anoncryptedConnectionResponse) {
+    cryptoAnonDecrypt(fromToVerkey, anoncryptedConnectionResponse) {
         this.ensureWalletExist();
         return indy.cryptoAnonDecrypt(this.walletHandle, fromToVerkey, anoncryptedConnectionResponse)
             .then(bufferData => {
                 return Promise.resolve(JSON.parse(Buffer.from(bufferData, 'utf8').toString()))
+            })
+    }
+
+
+    cryptoAuthCrypt(sendVk, receiverVk, data) {
+        this.ensureWalletExist();
+        let json = data;
+        if(typeof data === 'object') {
+            json = JSON.stringify(data);
+        }
+        return indy.cryptoAuthCrypt(this.walletHandle, sendVk, receiverVk, Buffer.from(json, 'utf8'));
+    }
+
+    cryptoAuthDecrypt(receiverVk, data) {
+        this.ensureWalletExist();
+        return indy.cryptoAuthDecrypt(this.walletHandle, receiverVk, Buffer.from(data))
+            .then(res => {
+                let [senderVerkey, authDecryptDidInfoJSON] = res;
+                return Promise.resolve([senderVerkey, JSON.parse(authDecryptDidInfoJSON)])
             })
     }
 
