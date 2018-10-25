@@ -114,13 +114,7 @@ class IndyTransClient extends indyTransProto.IndyTrans {
                             });
                         break;
                     case Code.ON_BOARDING_SUCCESS:      //onboarding 成功
-                        resolve({
-                            myDid: communicationDid,
-                            myVerkey: communicationVerkey,
-                            targetDid: targetDid,
-                            targetVerkey: targetVerkey,
-                            call: call,
-                        });
+                        resolve([call, communicationDid, communicationVerkey, targetDid, targetVerkey]);
                         break;
                     case Code.ERROR:
                         call.end();

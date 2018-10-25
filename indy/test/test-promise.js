@@ -1,11 +1,7 @@
-async function test() {
-    return 1;
+function test(a, ...args) {
+    console.log(Array.isArray(args));
+    console.log(args);
 }
 
-test()
-.then(res => {
-    console.log(res);
-})
-.catch(err => {
-    console.log(err);
-})
+test(1, 2, 3, 4, 5);
+test(1, [2, 3, 4, 5]);

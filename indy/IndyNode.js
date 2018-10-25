@@ -14,7 +14,7 @@ class IndyNode {
      * 确保当前对象打开了一个钱包
      */
     ensureWalletExist() {
-        if(!this.walletHandle) {
+        if (!this.walletHandle) {
             throw Error('Wallet not exist');
         }
     }
@@ -23,7 +23,7 @@ class IndyNode {
      * 确保当前对象连接了一个节点池
      */
     ensurePoolHandleExist() {
-        if(!this.poolHandle) {
+        if (!this.poolHandle) {
             throw Error('Pool handle not exist');
         }
     }
@@ -32,7 +32,7 @@ class IndyNode {
      * 确保当前对象有一个可以操作账本的 Verinym Did
      */
     ensureCurrentVerinymDid() {
-        if(!this.currentVerinymDid) {
+        if (!this.currentVerinymDid) {
             throw Error('Current VerinymDid is not set');
         }
     }
@@ -67,7 +67,7 @@ class IndyNode {
      */
     openPoolLeger(poolName) {
         const that = this;
-        return new Promise((resolve, reject) =>  {
+        return new Promise((resolve, reject) => {
             indy.openPoolLedger(poolName)
                 .then(res => {
                     //保存poolHandle
@@ -116,8 +116,8 @@ class IndyNode {
                 that.walletCredentials = walletCredentials;
                 return Promise.resolve(1);
             })
-            .catch (err => {
-                if(err.message !== "WalletAlreadyExistsError") {
+            .catch(err => {
+                if (err.message !== "WalletAlreadyExistsError") {
                     return Promise.reject(err);
                 } else {
                     console.log(`============Wallet for ${JSON.stringify(walletConfig)}, ${JSON.stringify(walletCredentials)} is exist, not create=============`);
@@ -135,8 +135,8 @@ class IndyNode {
      */
     openWallet() {
         const that = this;
-        return new Promise((resolve, reject) =>  {
-            if(!!that.walletConfig && !!that.walletCredentials) {   //配置正常，则尝试打开
+        return new Promise((resolve, reject) => {
+            if (!!that.walletConfig && !!that.walletCredentials) {   //配置正常，则尝试打开
                 indy.openWallet(that.walletConfig, that.walletCredentials)
                     .then(walletHandle => {
                         that.walletHandle = walletHandle;
@@ -164,7 +164,6 @@ class IndyNode {
     }
 
 
-
     /**
      * 根据一个指定的种子在当前节点的钱包中创建一个Did，并保存在钱包当中
      * 同时当前节点对象的
@@ -182,7 +181,7 @@ class IndyNode {
                 return Promise.resolve(res);
             })
             .catch(err => {
-                if(err.message === 'DidAlreadyExistsError') {
+                if (err.message === 'DidAlreadyExistsError') {
                     return Promise.reject(err);
                 } else {
                     return Promise.reject(err);
@@ -199,7 +198,6 @@ class IndyNode {
         this.ensureWalletExist();
         return indy.createAndStoreMyDid(this.walletHandle, {});
     }
-
 
 
     /////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +237,7 @@ class IndyNode {
 
     cryptoAnonCrypt(fromToVerkey, data) {
         let json = data;
-        if(typeof data === 'object') {
+        if (typeof data === 'object') {
             json = JSON.stringify(data);
         }
         return indy.cryptoAnonCrypt(fromToVerkey, Buffer.from(json, 'utf8'));
@@ -257,7 +255,7 @@ class IndyNode {
     cryptoAuthCrypt(sendVk, receiverVk, data) {
         this.ensureWalletExist();
         let json = data;
-        if(typeof data === 'object') {
+        if (typeof data === 'object') {
             json = JSON.stringify(data);
         }
         return indy.cryptoAuthCrypt(this.walletHandle, sendVk, receiverVk, Buffer.from(json, 'utf8'));
@@ -279,6 +277,29 @@ class IndyNode {
     updateCurrentVerinymDid(verrinymDid) {
         this.currentVerinymDid = verrinymDid;
     }
+
+
+
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    ///////// 下面是证书相关的封装函数
+    ///////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * 用当前节点的 Verinym Did 签署发布一个证书模式
+     * @param certificationName
+     * @param certificationVersion
+     * @param certificationProps
+     * @returns {*}
+     */
+    issuerCreateSchema(certificationName, certificationVersion, certificationProps) {
+        this.ensureCurrentVerinymDid();
+        if(!Array.isArray(certificationProps)) {
+            throw Error('certificationProps must be array');
+        }
+        return indy.issuerCreateSchema(this.currentVerinymDid, certificationName, certificationVersion, certificationProps);
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////////
     /////////  下面包含节点对账本的操作
@@ -331,6 +352,76 @@ class IndyNode {
                 return indy.signAndSubmitRequest(that.poolHandle, this.walletHandle, that.currentVerinymDid, nymRequest);
             });
 
+    }
+
+
+    /**
+     * 将一个证书模式用当前节点的身份保存到账本当中
+     * @param certificationSchema
+     * @returns {PromiseLike<T | never> | Promise<T | never>}
+     */
+    sendSchema(certificationSchema) {
+        this.ensurePoolHandleExist();
+        this.ensureWalletExist();
+        this.ensureCurrentVerinymDid();
+        return indy.buildSchemaRequest(this.currentVerinymDid, certificationSchema)
+            .then(schemaRequest => {
+                return indy.signAndSubmitRequest(this.poolHandle, this.walletHandle, this.currentVerinymDid, schemaRequest);
+            })
+    }
+
+    /**
+     * 讲一个证书定义用当前节点的身份保存到账本当中
+     * @param credDef
+     */
+    sendCredDef(credDef) {
+        this.ensurePoolHandleExist();
+        this.ensureWalletExist();
+        this.ensureCurrentVerinymDid();
+        return indy.buildCredDefRequest(this.currentVerinymDid, credDef)
+            .then(credDefRequest => {
+                return indy.signAndSubmitRequest(this.poolHandle, this.walletHandle, this.currentVerinymDid, credDefRequest);
+            })
+    }
+
+    /**
+     * 通过模式Id查询模式定义
+     * @param schemaId
+     * @param submitterDid
+     */
+    getSchema(schemaId, submitterDid) {
+        this.ensurePoolHandleExist();
+        if(!submitterDid)
+            this.ensureCurrentVerinymDid();
+        let _submitterDid = submitterDid ? submitterDid : this.currentVerinymDid;
+        const that = this;
+        indy.buildGetSchemaRequest(_submitterDid, schemaId)
+            .then(getSchemaRequest => {
+                return indy.submitRequest(that.poolHandle, getSchemaRequest)
+            })
+            .then(getSchemaResponse => {
+                return indy.parseGetSchemaResponse(getSchemaResponse);
+            })
+    }
+
+    /**
+     * 通过证书定义Id查询证书定义
+     * @param credDefId
+     * @param submitterDid
+     */
+    getCredDef(credDefId, submitterDid) {
+        this.ensurePoolHandleExist();
+        if(!submitterDid)
+            this.ensureCurrentVerinymDid();
+        let _submitterDid = submitterDid ? submitterDid : this.currentVerinymDid;
+        const that = this;
+        indy.buildGetCredDefRequest(_submitterDid, credDefId)
+            .then(getCredDefRequest => {
+                return indy.submitRequest(that.poolHandle, getCredDefRequest)
+            })
+            .then(getCredDefResponse => {
+                return indy.parseGetCredDefResponse(getCredDefResponse);
+            })
     }
 
 
