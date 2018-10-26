@@ -17,10 +17,16 @@ async function main() {
         .catch(err => {
             console.log(err);
         });
-    let indyTransClient = new IndyTrancClient('localhost', '9748', indyNode);
+    let indyTransClient = new IndyTrancClient('localhost', '9749', indyNode);
+    let call;
+    let myDid, myVerkey, targetDid, targetVerkey;
     indyTransClient.doOnBoarding()
         .then(res => {
-            console.log(JSON.stringify(res));
+            [call, myDid, myVerkey, targetDid, targetVerkey] = res;
+            return indyTransClient.getCredential(call, myDid, myVerkey, targetVerkey, '8viGv9CAbmdSLotjmEZmrf:3:CL:191:TAG1')
+        })
+        .then(res => {
+            console.log(res);
         });
 }
 

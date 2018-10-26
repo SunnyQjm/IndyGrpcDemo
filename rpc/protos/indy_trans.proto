@@ -26,6 +26,10 @@ enum TransCode {
     GET_VERINYM_REQUEST = 5; // 《getVerinym》向一个Steward级的节点，请求一个身份
     GET_VERINYM_SUCCESS = 6; // 《getVerinym》getVerinym的回复信息
     ERROR = 7; //通信过程中发送错误
+    GET_CREDENTIAL_GET_CRED_DEF_REQUEST = 8;
+    GET_CREDENTIAL_OFFER_RESPONSE = 9;
+    GET_CREDENTIAL_GET_CRED_DETAIL_REQUEST = 10;
+    GET_CREDENTIAL_CREDENTIAL_RESPONSE = 11;
 }
 
 message IndyTransBytesRequest {

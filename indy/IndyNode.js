@@ -150,6 +150,32 @@ class IndyNode {
     }
 
     /**
+     * 关闭当前钱包
+     */
+    closeWallet() {
+        this.ensureWalletExist();
+        return indy.closeWallet(this.walletHandle);
+    }
+
+    deleteWallet(walletConfig, walletCredentials) {
+        this.ensureWalletExist();
+        return indy.deleteWallet(walletConfig, walletCredentials);
+    }
+
+    /**
+     * 删除当前打开的钱包
+     * @returns {*}
+     */
+    closeAndDeleteWallet() {
+        this.ensureWalletExist();
+        const that = this;
+        return that.closeWallet()
+            .then(res => {
+                return that.deleteWallet(this.walletConfig, this.walletCredentials);
+            });
+    }
+
+    /**
      * 如果不存在则根据配置创建钱包, 接着打开钱包
      * @param walletConfig
      * @param walletCredentials
@@ -199,6 +225,43 @@ class IndyNode {
         return indy.createAndStoreMyDid(this.walletHandle, {});
     }
 
+
+    /**
+     * 证书的申请者在本地钱包创建一个Master SecretId
+     * @param masterSecretId
+     */
+    proverCreateMasterSecret(masterSecretId = null) {
+        this.ensureWalletExist();
+        return indy.proverCreateMasterSecret(this.walletHandle);
+    }
+
+
+    /**
+     * 证书的申请者构造
+     * @param proverDid
+     * @param authDecryptCredOfferJson
+     * @param credDef
+     * @param masterSecretId
+     * @returns {*}
+     */
+    proverCreateCredentialReq(proverDid, authDecryptCredOfferJson, credDef, masterSecretId) {
+        this.ensureWalletExist();
+        return indy.proverCreateCredentialReq(this.walletHandle, proverDid, authDecryptCredOfferJson, credDef, masterSecretId);
+    }
+
+    /**
+     * 证书申请者 验证证书的有效性，并将证书存储到自己的钱包当中
+     * @param credId
+     * @param credRequestMetaJson
+     * @param cred
+     * @param credDef
+     * @param revRegDef
+     * @returns {*}
+     */
+    proverStoreCredential(credId, credRequestMetaJson, cred, credDef, revRegDef = null) {
+        this.ensureWalletExist();
+        return indy.proverStoreCredential(this.walletHandle, credId, credRequestMetaJson, cred, credDef, revRegDef);
+    }
 
     /////////////////////////////////////////////////////////////////////////////////
     //////// 构造一些请求提和返回体信息
@@ -254,6 +317,7 @@ class IndyNode {
 
     cryptoAuthCrypt(sendVk, receiverVk, data) {
         this.ensureWalletExist();
+        console.log('auth crypt: ' + data);
         let json = data;
         if (typeof data === 'object') {
             json = JSON.stringify(data);
@@ -266,6 +330,10 @@ class IndyNode {
         return indy.cryptoAuthDecrypt(this.walletHandle, receiverVk, Buffer.from(data))
             .then(res => {
                 let [senderVerkey, authDecryptDidInfoJSON] = res;
+                console.log('auth decrypt： ');
+                console.log(authDecryptDidInfoJSON);
+                console.log('auth decrypt and parse: ');
+                console.log(JSON.parse(authDecryptDidInfoJSON));
                 return Promise.resolve([senderVerkey, JSON.parse(authDecryptDidInfoJSON)])
             })
     }
@@ -300,7 +368,44 @@ class IndyNode {
         return indy.issuerCreateSchema(this.currentVerinymDid, certificationName, certificationVersion, certificationProps);
     }
 
+    /**
+     * 用当前节点的 Verinym Did 签署发布一个证书定义
+     * @param transcriptSchema
+     * @param tag
+     * @param signatureType
+     * @param config
+     * @returns {*}
+     */
+    issuerCreateAndStoreCredentialDef(transcriptSchema, tag, signatureType, config) {
+        this.ensureWalletExist();
+        this.ensureCurrentVerinymDid();
+        return indy.issuerCreateAndStoreCredentialDef(this.walletHandle,
+            this.currentVerinymDid, transcriptSchema, tag, signatureType, config)
+    }
 
+    /**
+     * 准备发布一个证书Offer
+     * @param credDefId
+     * @returns {*}
+     */
+    issuerCreateCredentialOffer(credDefId) {
+        this.ensureWalletExist();
+        return indy.issuerCreateCredentialOffer(this.walletHandle, credDefId);
+    }
+
+    /**
+     * 创建一个证书（包含相信信息）
+     * @param credOffer
+     * @param credRequestJson
+     * @param credValues
+     * @param revRegId
+     * @param blogStorageHandle
+     */
+    issuerCreateCredential(credOffer, credRequestJson, credValues, revRegId = null, blogStorageHandle = -1) {
+        this.ensureWalletExist();
+        return indy.issuerCreateCredential(this.walletHandle, credOffer, credRequestJson, credValues, revRegId,
+            blogStorageHandle);
+    }
     /////////////////////////////////////////////////////////////////////////////////
     /////////  下面包含节点对账本的操作
     /////////////////////////////////////////////////////////////////////////////////
@@ -395,7 +500,7 @@ class IndyNode {
             this.ensureCurrentVerinymDid();
         let _submitterDid = submitterDid ? submitterDid : this.currentVerinymDid;
         const that = this;
-        indy.buildGetSchemaRequest(_submitterDid, schemaId)
+        return indy.buildGetSchemaRequest(_submitterDid, schemaId)
             .then(getSchemaRequest => {
                 return indy.submitRequest(that.poolHandle, getSchemaRequest)
             })
@@ -415,7 +520,7 @@ class IndyNode {
             this.ensureCurrentVerinymDid();
         let _submitterDid = submitterDid ? submitterDid : this.currentVerinymDid;
         const that = this;
-        indy.buildGetCredDefRequest(_submitterDid, credDefId)
+        return indy.buildGetCredDefRequest(_submitterDid, credDefId)
             .then(getCredDefRequest => {
                 return indy.submitRequest(that.poolHandle, getCredDefRequest)
             })

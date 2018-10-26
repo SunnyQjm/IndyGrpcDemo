@@ -24,7 +24,6 @@ async function main() {
     //Faber 首先连接到Steward节点，然后获取到 TrustAnchor 身份
     await indyTransClient.doOnBoarding()
         .then(res => {
-            console.log(res);
             [call, myDid, myVerkey, targetDid, targetVerkey] = res;
             // onboarding 成功之后接着申请 TrustAnchor 身份
             return indyTransClient.getVerinymDid(call, 'TRUST_ANCHOR', myVerkey, targetVerkey);
@@ -35,7 +34,8 @@ async function main() {
 
             //政府创建成绩证明模式
             return indyNode.issuerCreateSchema('Transcript', '1.2',
-                ['first_name', 'last_name', 'salary', 'employee_status', 'experience'])
+                ['first_name', 'last_name', 'degree', 'status',
+                    'year', 'average', 'ssn'])
         })
         .then(res => {
             let [transcriptSchemaId, transcriptSchema] = res;
