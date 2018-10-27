@@ -194,6 +194,7 @@ class IndyNode {
      * 根据一个指定的种子在当前节点的钱包中创建一个Did，并保存在钱包当中
      * 同时当前节点对象的
      * @param seed
+     * @returns {*} [ did: String, verkey: String ]
      */
     createAndStoreDidBySeed(seed) {
         //首先保证钱包存在并打开了，否则抛出异常
@@ -203,22 +204,12 @@ class IndyNode {
         return indy.createAndStoreMyDid(this.walletHandle, {
             seed: seed
         })
-            .then(res => {
-                return Promise.resolve(res);
-            })
-            .catch(err => {
-                if (err.message === 'DidAlreadyExistsError') {
-                    return Promise.reject(err);
-                } else {
-                    return Promise.reject(err);
-                }
-            });
     }
 
     /**
      * 随机生成一个seed并用它生成 Did 和 Verkey
      * 这个随机生成的标识通常用于建立安全连接时使用，仅当前连接有效
-     * @returns {*}
+     * @returns {*} [ did: String, verkey: String ]
      */
     createAndStoreDidRandom() {
         this.ensureWalletExist();
@@ -228,7 +219,8 @@ class IndyNode {
 
     /**
      * 证书的申请者在本地钱包创建一个Master SecretId
-     * @param masterSecretId
+     * @param masterSecretId 创建指定的ID（这个ID必须唯一，重复创建会报错）
+     * @return {*} [outMasterSecretId: String]
      */
     proverCreateMasterSecret(masterSecretId = null) {
         this.ensureWalletExist();
@@ -237,31 +229,63 @@ class IndyNode {
 
 
     /**
-     * 证书的申请者构造
+     * 根据指定的 credOffer 创建一个credRequest
      * @param proverDid
-     * @param authDecryptCredOfferJson
-     * @param credDef
-     * @param masterSecretId
-     * @returns {*}
+     * @param credOffer         证书Offer
+     * @param credDef           证书定义
+     * @param masterSecretId    prover生成的masterSecretId
+     *
+     * @returns {*} [ credReq: Object, credReqMetadata: Object ]
      */
-    proverCreateCredentialReq(proverDid, authDecryptCredOfferJson, credDef, masterSecretId) {
+    proverCreateCredentialReq(proverDid, credOffer, credDef, masterSecretId) {
         this.ensureWalletExist();
-        return indy.proverCreateCredentialReq(this.walletHandle, proverDid, authDecryptCredOfferJson, credDef, masterSecretId);
+        return indy.proverCreateCredentialReq(this.walletHandle, proverDid, credOffer, credDef, masterSecretId);
     }
 
     /**
      * 证书申请者 验证证书的有效性，并将证书存储到自己的钱包当中
-     * @param credId
-     * @param credRequestMetaJson
-     * @param cred
-     * @param credDef
-     * @param revRegDef
-     * @returns {*}
+     * @param credId            指定保存在本地时关联的证书id，这是可选的，如果传null则会生成一个随机的id
+     * @param credRequestMeta   证书请求的元数据（执行proverCreateCredentialReq得到）
+     * @param cred              证书
+     * @param credDef           证书定义
+     * @param revRegDef         撤销注册表定义
+     * @returns {*} [outCredId: String]
      */
-    proverStoreCredential(credId, credRequestMetaJson, cred, credDef, revRegDef = null) {
+    proverStoreCredential(credId, credRequestMeta, cred, credDef, revRegDef = null) {
         this.ensureWalletExist();
-        return indy.proverStoreCredential(this.walletHandle, credId, credRequestMetaJson, cred, credDef, revRegDef);
+        return indy.proverStoreCredential(this.walletHandle, credId, credRequestMeta, cred, credDef, revRegDef);
     }
+
+
+    /**
+     * 获取瞒住filter过滤条件的证书列表
+     * @param filter    证书过滤参数
+                  {
+                   "schema_id": string, (Optional)
+                   "schema_issuer_did": string, (Optional)
+                   "schema_name": string, (Optional)
+                   "schema_version": string, (Optional)
+                   "issuer_did": string, (Optional)
+                   "cred_def_id": string, (Optional)
+                  }
+     * @return {*}  [credentials: Array]    返回满足条件的证书列表
+     */
+    proverGetCredentials(filter) {
+        this.ensureWalletExist();
+        return indy.proverGetCredentials(this.walletHandle, filter);
+    }
+
+    /**
+     * 通过证书Id获取指定的证书
+     * @param credId     证书Id
+     *
+     * @return {*} [credential: Object]
+     */
+    proverGetCredential(credId) {
+        this.ensureWalletExist();
+        return indy.proverGetCredential(this.walletHandle, credId);
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////////
     //////// 构造一些请求提和返回体信息
@@ -298,33 +322,58 @@ class IndyNode {
     ///////// 下面是一些加解密函数封装
     /////////////////////////////////////////////////////////////////////////////////
 
-    cryptoAnonCrypt(fromToVerkey, data) {
+    /**
+     * 用 匿名加密方案(用对方的公钥对消息进行加密，对方可用自己的私钥解密) 对消息进行加密
+     * @param receiverVerkey            接收密文者的公钥
+     * @param data: Buffer              要加密消息
+     * @return {*}  [encryptedMsgRaw: Buffer]
+     */
+    cryptoAnonCrypt(receiverVerkey, data) {
         let json = data;
         if (typeof data === 'object') {
             json = JSON.stringify(data);
         }
-        return indy.cryptoAnonCrypt(fromToVerkey, Buffer.from(json, 'utf8'));
+        return indy.cryptoAnonCrypt(receiverVerkey, Buffer.from(json, 'utf8'));
     }
 
-    cryptoAnonDecrypt(fromToVerkey, anoncryptedConnectionResponse) {
+    /**
+     * 用 匿名加密方案(用对方的公钥对消息进行加密，对方可用自己的私钥解密) 对密文进行解密
+     * @param receiverVerkey        接收密文者的公钥（应该可以通过这个公钥接收者本地的钱包中得到秘钥，来对消息进行解密）
+     * @param msgRaw: Buffer        密文
+     * @return {*} [decryptedMsgRaw: Buffer]
+     */
+    cryptoAnonDecrypt(receiverVerkey, msgRaw) {
         this.ensureWalletExist();
-        return indy.cryptoAnonDecrypt(this.walletHandle, fromToVerkey, anoncryptedConnectionResponse)
+        return indy.cryptoAnonDecrypt(this.walletHandle, receiverVerkey, msgRaw)
             .then(bufferData => {
                 return Promise.resolve(JSON.parse(Buffer.from(bufferData, 'utf8').toString()))
             })
     }
 
 
-    cryptoAuthCrypt(sendVk, receiverVk, data) {
+    /**
+     * 用 认证加密方案（就是两对公私钥计算出共享秘钥的方式）对消息进行加密
+     * @param sendVk                    发送加密消息者的verkey
+     * @param receiverVk                接收加密消息者的verkey
+     * @param msgRaw: Buffer            要被加密的数据
+     * @return {*}  [encryptedMsgRaw: Buffer]
+     */
+    cryptoAuthCrypt(sendVk, receiverVk, msgRaw) {
         this.ensureWalletExist();
-        console.log('auth crypt: ' + data);
-        let json = data;
-        if (typeof data === 'object') {
-            json = JSON.stringify(data);
+        console.log('auth crypt: ' + msgRaw);
+        let json = msgRaw;
+        if (typeof msgRaw === 'object') {
+            json = JSON.stringify(msgRaw);
         }
         return indy.cryptoAuthCrypt(this.walletHandle, sendVk, receiverVk, Buffer.from(json, 'utf8'));
     }
 
+    /**
+     * 用 认证加密方案（就是两对公私钥计算出共享秘钥的方式）对密文进行解密
+     * @param receiverVk            接收密文者的verkey
+     * @param data: Buffer          密文
+     * @return {*}  [sendVk: String, decryptedMsgRaw: Buffer]
+     */
     cryptoAuthDecrypt(receiverVk, data) {
         this.ensureWalletExist();
         return indy.cryptoAuthDecrypt(this.walletHandle, receiverVk, Buffer.from(data))
@@ -347,8 +396,6 @@ class IndyNode {
     }
 
 
-
-
     ///////////////////////////////////////////////////////////////////////////////////
     ///////// 下面是证书相关的封装函数
     ///////////////////////////////////////////////////////////////////////////////////
@@ -358,7 +405,7 @@ class IndyNode {
      * @param certificationName
      * @param certificationVersion
      * @param certificationProps
-     * @returns {*}
+     * @returns {*} [ id: String, schema: Object ]
      */
     issuerCreateSchema(certificationName, certificationVersion, certificationProps) {
         this.ensureCurrentVerinymDid();
@@ -370,11 +417,11 @@ class IndyNode {
 
     /**
      * 用当前节点的 Verinym Did 签署发布一个证书定义
-     * @param transcriptSchema
-     * @param tag
-     * @param signatureType
-     * @param config
-     * @returns {*}
+     * @param transcriptSchema          证书的模式定义
+     * @param tag                       标签（可用于区分同一个issuer，根据同一个schema发布的不同CredentialDef）
+     * @param signatureType             签名类型（default - 'CL'）
+     * @param config                    签名配置
+     * @returns {*}  [ credDefId: String, credDef: Object ]
      */
     issuerCreateAndStoreCredentialDef(transcriptSchema, tag, signatureType, config) {
         this.ensureWalletExist();
@@ -384,9 +431,10 @@ class IndyNode {
     }
 
     /**
-     * 准备发布一个证书Offer
-     * @param credDefId
-     * @returns {*}
+     * 发布一个证书Offer, 证书的使用者会用这个offer去请求证书
+     * @param credDefId   证书定义id
+     *
+     * @returns {*} [credOffer: Object]
      */
     issuerCreateCredentialOffer(credDefId) {
         this.ensureWalletExist();
@@ -394,16 +442,19 @@ class IndyNode {
     }
 
     /**
-     * 创建一个证书（包含相信信息）
-     * @param credOffer
-     * @param credRequestJson
-     * @param credValues
+     * 检查credRequest的有效性，并创建一个证书（包含详细信息）
+     *  1. credOffer 和 credRequest 要匹配
+     *  2. cred definition 和 cred offer 要求已经创建并存在与本地的wallet中
+     * @param credOffer         证书offer
+     * @param credRequest       证书请求
+     * @param credValues        证书内容
      * @param revRegId
      * @param blogStorageHandle
+     * @return {*} [ cred: Object, credRevocId: String, revocRegDelta: Object ]
      */
-    issuerCreateCredential(credOffer, credRequestJson, credValues, revRegId = null, blogStorageHandle = -1) {
+    issuerCreateCredential(credOffer, credRequest, credValues, revRegId = null, blogStorageHandle = -1) {
         this.ensureWalletExist();
-        return indy.issuerCreateCredential(this.walletHandle, credOffer, credRequestJson, credValues, revRegId,
+        return indy.issuerCreateCredential(this.walletHandle, credOffer, credRequest, credValues, revRegId,
             blogStorageHandle);
     }
     /////////////////////////////////////////////////////////////////////////////////

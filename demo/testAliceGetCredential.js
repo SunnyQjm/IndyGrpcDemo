@@ -68,6 +68,7 @@ async function government() {
         .then(res => {
             let [transcriptSchemaId, transcriptSchema] = res;
             console.log('成功创建成绩模式定义: ' + transcriptSchemaId);
+            console.log(transcriptSchema);
             gTranscriptSchemaId = transcriptSchemaId;
             return indyNode.sendSchema(transcriptSchema);
         })
